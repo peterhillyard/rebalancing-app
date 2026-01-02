@@ -14,6 +14,9 @@
         .input-row button { padding: 8px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; }
         .add-btn { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
         .add-btn:hover { background: #218838; }
+        .calc-btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; margin-left: 10px; }
+        .calc-btn:hover { background: #0056b3; }
+        .calc-btn:disabled { background: #6c757d; cursor: not-allowed; }
         .header-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #007bff; }
         #holdings-list { margin-top: 20px; }
         .contribution-section { margin-bottom: 30px; padding: 15px; background: #f8f9fa; border-radius: 5px; }
@@ -54,11 +57,13 @@
     </div>
     
     <button class="add-btn" id="add-row-btn">+ Add Holding</button>
+    <button class="calc-btn" id="calc-btn">Calculate</button>
 </div>
 
 <script>
     let holdingsData = [];
     let rowCounter = 0;
+    let pyodide = null;
 
     function addRow() {
         const rowId = rowCounter++;
@@ -131,14 +136,192 @@
     });
 
     async function initPyodide() {
-        let pyodide = await loadPyodide();
+        pyodide = await loadPyodide();
+        await pyodide.loadPackage('numpy');
+        await pyodide.loadPackage('scipy');
         console.log("Python is ready!");
+        document.getElementById('calc-btn').disabled = false;
     }
+
+    async function calculate() {
+        if (!pyodide) {
+            console.error('Pyodide not initialized yet');
+            return;
+        }
+        
+        // Get contribution amount
+        const contributionAmount = parseFloat(document.getElementById('contribution-amount').value) || 0;
+        
+        // Create list of dictionaries with all holding data
+        const holdingsList = holdingsData.map(h => ({
+            ticker: h.ticker || '',
+            target_percent: h.target || 0,
+            current_amount: h.amount || 0
+        }));
+        
+        // Pass data to Python namespace
+        pyodide.globals.set('contribution_amount', contributionAmount);
+        pyodide.globals.set('holdings_list', holdingsList);
+        
+        const pythonCode = `
+import numpy as np
+from scipy.optimize import minimize
+from dataclasses import dataclass
+from typing import List
+
+@dataclass
+class Holding:
+    ticker: str
+    target_percentage: float
+    current_holding: float
+
+@dataclass
+class Contribution:
+    ticker: str
+    amount_to_deposit: float
+
+def objective(c: np.ndarray, x: np.ndarray, p: np.ndarray, T: float) -> float:
+    # objective is sum of the abs diff between the projected percentage and the target percentage
+    denom = (x + c * T).sum()
+
+    j_c = np.sum(np.abs(((x + c * T) / denom) - p))
+
+    return j_c
+
+def new_objective(c: np.ndarray, x: np.ndarray, p: np.ndarray, T: float, debug: bool) -> float:
+    projected_value_per_fund = x + c * T
+    total_projected_portfolio_value = (projected_value_per_fund).sum()
+
+    diff_between_projected_and_target = (projected_value_per_fund / total_projected_portfolio_value) - p
+
+    underfunded_diffs = diff_between_projected_and_target[diff_between_projected_and_target <= 0]
+    overfunded_diffs = diff_between_projected_and_target[diff_between_projected_and_target > 0]
+
+    if debug:
+        print("c", c)
+        print("diffs", diff_between_projected_and_target)
+        print("underfunded diffs", underfunded_diffs)
+        print("")
+
+    diff_between_min_and_max_underfunded = np.abs(underfunded_diffs.max() - underfunded_diffs.min())
+    overfunded_penalty = np.sum(overfunded_diffs * 10)
+
+    j_c = diff_between_min_and_max_underfunded + overfunded_penalty
+
+    return j_c
+
+def sum_to_1_constraint(c: np.ndarray):
+    return 1.0 - c.sum()
+
+def get_optimal_values_new(holdings: List[Holding], amount_to_deposit, debug=False) -> List[Contribution]:
+    num_holdings = len(holdings)
+    c_0 = np.ones(num_holdings) * (1.0 / num_holdings)
+
+    current_values = np.array([h.current_holding for h in holdings])
+    target_fractions = np.array([h.target_percentage for h in holdings]) * 1e-2
+
+    bounds = [[0.0, 1.0] for _ in range(num_holdings)]
+    constraint_params = {"type": "eq", "fun": sum_to_1_constraint}
+    constraints = [constraint_params]
+
+    solution = minimize(new_objective, c_0, args=(current_values, target_fractions, amount_to_deposit, debug), method="SLSQP", bounds=bounds, constraints=constraints)
+
+    return [
+        Contribution(ticker=h.ticker, amount_to_deposit=int(amount_to_deposit * percent_of_total * 100) / 100.0)
+        for h, percent_of_total in zip(holdings, solution.x)
+    ]
+
+def main() -> List[Contribution]:
+    # Convert JavaScript proxy to Python object
+    holdings_py = holdings_list.to_py()
+
+    holdings = [
+        Holding(ticker=h['ticker'], target_percentage=h['target_percent'], current_holding=h['current_amount']) 
+        for h in holdings_py
+    ]
+
+    return get_optimal_values_new(holdings, contribution_amount, debug=False)
+
+
+if __name__ == "__main__":
+    contributions = main()
+
+    contributions_dicts = [{'ticker': c.ticker, 'amount_to_deposit': c.amount_to_deposit} for c in contributions]
+
+contributions_dicts
+        `;
+        
+        try {
+            const result = await pyodide.runPythonAsync(pythonCode);
+            console.log('Python result:', result);
+            
+            // Convert Python result to JavaScript array
+            const contributions = result.toJs();
+            console.log('Contributions JS:', contributions);
+            
+            // Update each holding's display value
+            contributions.forEach(contrib => {
+                const ticker = contrib.get('ticker');
+                const amountToDeposit = contrib.get('amount_to_deposit');
+                
+                // Find the corresponding holding by ticker
+                const holding = holdingsData.find(h => h.ticker === ticker);
+                if (holding) {
+                    // Update the display element
+                    const displayElement = document.getElementById(`calc-${holding.id}`);
+                    if (displayElement) {
+                        displayElement.textContent = amountToDeposit.toFixed(2);
+                    }
+                }
+            });
+            
+            // Update totals after updating all contributions
+            updateTotals();
+            
+        } catch (err) {
+            console.error('Python error:', err);
+        }
+    }
+
+    document.getElementById('calc-btn').addEventListener('click', calculate);
+    document.getElementById('calc-btn').disabled = true;
 
     initPyodide();
     
-    // Add initial row
-    addRow();
+    // Prepopulate holdings
+    const prepopulatedHoldings = {
+        "VBIL": 2.0,
+        "VTIP": 1.5,
+        "VCIT": 1.5,
+        "VOO": 7.5,
+        "VTV": 15.0,
+        "VB": 15.0,
+        "VBR": 12.5,
+        "VT": 15.75,
+        "VSS": 29.25
+    };
+    
+    // Add rows for prepopulated holdings
+    Object.entries(prepopulatedHoldings).forEach(([ticker, targetPercent]) => {
+        addRow();
+        const lastHolding = holdingsData[holdingsData.length - 1];
+        const rowId = lastHolding.id;
+        
+        // Update the data
+        lastHolding.ticker = ticker;
+        lastHolding.target = targetPercent;
+        lastHolding.amount = 0;
+        
+        // Update the input fields
+        const rowElement = document.getElementById(`row-${rowId}`);
+        if (rowElement) {
+            rowElement.querySelector('[data-field="ticker"]').value = ticker;
+            rowElement.querySelector('[data-field="target"]').value = targetPercent;
+            rowElement.querySelector('[data-field="amount"]').value = 0;
+        }
+    });
+    
+    updateTotals();
 </script>
 
 </body>
