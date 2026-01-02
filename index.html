@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Input Example</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; line-height: 1.6; }
+        .container { border: 1px solid #ddd; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        input { padding: 10px; width: 70%; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 10px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { background: #6c757d; }
+        #output { margin-top: 20px; padding: 15px; background: #f8f9fa; border-left: 5px solid #007bff; min-height: 40px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Python String Reverser</h2>
+    <p>Type something below and let Python process it:</p>
+    
+    <input type="text" id="user-input" placeholder="Type a message..." disabled>
+    <button id="run-btn" disabled>Loading...</button>
+
+    <div id="output">The result will appear here.</div>
+</div>
+
+<script>
+    async function initPyodide() {
+        let pyodide = await loadPyodide();
+        
+        // UI Updates once loaded
+        document.getElementById("user-input").disabled = false;
+        document.getElementById("run-btn").disabled = false;
+        document.getElementById("run-btn").innerText = "Process with Python";
+        document.getElementById("output").innerText = "Python is ready!";
+
+        document.getElementById("run-btn").addEventListener("click", async () => {
+            // We can pass JavaScript variables into the Python scope
+            const inputText = document.getElementById("user-input").value;
+            pyodide.globals.set("js_input", inputText);
+
+            const pythonCode = `
+import js
+
+# Access the variable we set in the globals
+data = js_input
+
+# Perform some Python logic
+if not data:
+    result = "Please enter some text first!"
+else:
+    reversed_text = data[::-1]
+    result = f"Python says: Your text reversed is '{reversed_text.upper()}'"
+
+result
+            `;
+
+            try {
+                const output = await pyodide.runPythonAsync(pythonCode);
+                document.getElementById("output").innerText = output;
+            } catch (err) {
+                document.getElementById("output").innerText = "Error: " + err;
+            }
+        });
+    }
+
+    initPyodide();
+</script>
+
+</body>
+</html>
