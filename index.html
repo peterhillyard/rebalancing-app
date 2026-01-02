@@ -8,19 +8,31 @@
     <style>
         body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; line-height: 1.6; }
         .container { border: 1px solid #ddd; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .input-row { display: grid; grid-template-columns: 2fr 1fr 2fr auto; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .input-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; align-items: center; margin-bottom: 10px; }
         .input-row input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .input-row .display-value { padding: 8px; background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; text-align: right; }
         .input-row button { padding: 8px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; }
         .add-btn { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
         .add-btn:hover { background: #218838; }
-        .header-row { display: grid; grid-template-columns: 2fr 1fr 2fr auto; gap: 10px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #007bff; }
+        .header-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #007bff; }
         #holdings-list { margin-top: 20px; }
+        .contribution-section { margin-bottom: 30px; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+        .contribution-section label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .contribution-section input { padding: 10px; width: 200px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        .totals-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 2px solid #007bff; font-weight: bold; }
+        .totals-row .display-value { padding: 8px; background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; text-align: right; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>Portfolio Rebalancing Calculator</h2>
+    
+    <div class="contribution-section">
+        <label for="contribution-amount">Contribution Amount ($):</label>
+        <input type="number" id="contribution-amount" placeholder="0.00" min="0" step="0.01">
+    </div>
+    
     <p>Enter your holdings to calculate rebalancing targets:</p>
     
     <div id="holdings-list">
@@ -28,8 +40,17 @@
             <div>Ticker</div>
             <div>Target %</div>
             <div>Current Amount ($)</div>
+            <div>Amount to Contribute ($)</div>
             <div></div>
         </div>
+    </div>
+    
+    <div class="totals-row">
+        <div>TOTALS</div>
+        <div class="display-value" id="total-target">0.00</div>
+        <div class="display-value" id="total-amount">0.00</div>
+        <div class="display-value" id="total-contribute">0.00</div>
+        <div></div>
     </div>
     
     <button class="add-btn" id="add-row-btn">+ Add Holding</button>
@@ -49,6 +70,7 @@
             <input type="text" placeholder="e.g., VTSAX" data-field="ticker" data-row="${rowId}">
             <input type="number" placeholder="20" min="0" max="100" step="0.01" data-field="target" data-row="${rowId}">
             <input type="number" placeholder="5000" min="0" step="0.01" data-field="amount" data-row="${rowId}">
+            <div class="display-value" id="calc-${rowId}">0.00</div>
             <button onclick="removeRow(${rowId})">Remove</button>
         `;
         
@@ -68,6 +90,27 @@
             rowElement.remove();
         }
         holdingsData = holdingsData.filter(item => item.id !== rowId);
+        updateTotals();
+    }
+
+    function updateTotals() {
+        let totalTarget = 0;
+        let totalAmount = 0;
+        let totalContribute = 0;
+        
+        holdingsData.forEach(holding => {
+            totalTarget += holding.target || 0;
+            totalAmount += holding.amount || 0;
+            // Get the calculated contribution value from the display element
+            const calcElement = document.getElementById(`calc-${holding.id}`);
+            if (calcElement) {
+                totalContribute += parseFloat(calcElement.textContent) || 0;
+            }
+        });
+        
+        document.getElementById('total-target').textContent = totalTarget.toFixed(2);
+        document.getElementById('total-amount').textContent = totalAmount.toFixed(2);
+        document.getElementById('total-contribute').textContent = totalContribute.toFixed(2);
     }
 
     document.getElementById('add-row-btn').addEventListener('click', addRow);
@@ -82,6 +125,7 @@
             const holding = holdingsData.find(h => h.id === rowId);
             if (holding) {
                 holding[field] = field === 'ticker' ? value : parseFloat(value) || 0;
+                updateTotals();
             }
         }
     });
