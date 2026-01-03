@@ -153,6 +153,13 @@
             return;
         }
         
+        // Validate that target percentages sum to 100
+        const totalTargetPercent = holdingsData.reduce((sum, holding) => sum + (holding.target || 0), 0);
+        if (Math.abs(totalTargetPercent - 100) > 0.01) {
+            alert(`Target percentages must sum to 100%. Current sum is ${totalTargetPercent.toFixed(2)}%`);
+            return;
+        }
+        
         // Get contribution amount
         const contributionAmount = parseFloat(document.getElementById('contribution-amount').value) || 0;
         
@@ -297,6 +304,13 @@ contributions_dicts
     document.getElementById('compute-contributions-btn').disabled = true;
 
     function rebalance() {
+        // Validate that target percentages sum to 100
+        const totalTargetPercent = holdingsData.reduce((sum, holding) => sum + (holding.target || 0), 0);
+        if (Math.abs(totalTargetPercent - 100) > 0.01) {
+            alert(`Target percentages must sum to 100%. Current sum is ${totalTargetPercent.toFixed(2)}%`);
+            return;
+        }
+        
         // Sum up all current holdings
         const totalCurrentAmount = holdingsData.reduce((sum, holding) => sum + (holding.amount || 0), 0);
         
