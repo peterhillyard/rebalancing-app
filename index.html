@@ -17,6 +17,8 @@
         .calc-btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; margin-left: 10px; }
         .calc-btn:hover { background: #0056b3; }
         .calc-btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .rebalance-btn { padding: 10px 20px; background: #6f42c1; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; margin-left: 10px; }
+        .rebalance-btn:hover { background: #5a32a3; }
         .header-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #007bff; }
         #holdings-list { margin-top: 20px; }
         .contribution-section { margin-bottom: 30px; padding: 15px; background: #f8f9fa; border-radius: 5px; }
@@ -58,6 +60,7 @@
     
     <button class="add-btn" id="add-row-btn">+ Add Holding</button>
     <button class="calc-btn" id="calc-btn">Calculate</button>
+    <button class="rebalance-btn" id="rebalance-btn">Rebalance</button>
 </div>
 
 <script>
@@ -291,6 +294,33 @@ contributions_dicts
 
     document.getElementById('calc-btn').addEventListener('click', calculate);
     document.getElementById('calc-btn').disabled = true;
+
+    function rebalance() {
+        // Sum up all current holdings
+        const totalCurrentAmount = holdingsData.reduce((sum, holding) => sum + (holding.amount || 0), 0);
+        
+        if (totalCurrentAmount === 0) {
+            alert('Please enter current amounts for your holdings.');
+            return;
+        }
+        
+        // Calculate target amount for each holding and display the difference
+        holdingsData.forEach(holding => {
+            const targetAmount = (holding.target / 100) * totalCurrentAmount;
+            const amountToContribute = targetAmount - (holding.amount || 0);
+            
+            // Update the display element
+            const displayElement = document.getElementById(`calc-${holding.id}`);
+            if (displayElement) {
+                displayElement.textContent = amountToContribute.toFixed(2);
+            }
+        });
+        
+        // Update totals
+        updateTotals();
+    }
+
+    document.getElementById('rebalance-btn').addEventListener('click', rebalance);
 
     initPyodide();
     
