@@ -14,9 +14,9 @@
         .input-row button { padding: 8px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; }
         .add-btn { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
         .add-btn:hover { background: #218838; }
-        .calc-btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; margin-left: 10px; }
-        .calc-btn:hover { background: #0056b3; }
-        .calc-btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .compute-contributions-btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; margin-left: 10px; }
+        .compute-contributions-btn:hover { background: #0056b3; }
+        .compute-contributions-btn:disabled { background: #6c757d; cursor: not-allowed; }
         .rebalance-btn { padding: 10px 20px; background: #6f42c1; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; margin-left: 10px; }
         .rebalance-btn:hover { background: #5a32a3; }
         .header-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #007bff; }
@@ -50,6 +50,8 @@
         </div>
     </div>
     
+    <button class="add-btn" id="add-row-btn">+ Add Holding</button>
+    
     <div class="totals-row">
         <div>TOTALS</div>
         <div class="display-value" id="total-target">0.00</div>
@@ -58,8 +60,7 @@
         <div></div>
     </div>
     
-    <button class="add-btn" id="add-row-btn">+ Add Holding</button>
-    <button class="calc-btn" id="calc-btn">Calculate</button>
+    <button class="compute-contributions-btn" id="compute-contributions-btn">Compute contributions</button>
     <button class="rebalance-btn" id="rebalance-btn">Rebalance</button>
 </div>
 
@@ -143,10 +144,10 @@
         await pyodide.loadPackage('numpy');
         await pyodide.loadPackage('scipy');
         console.log("Python is ready!");
-        document.getElementById('calc-btn').disabled = false;
+        document.getElementById('compute-contributions-btn').disabled = false;
     }
 
-    async function calculate() {
+    async function computeContributions() {
         if (!pyodide) {
             console.error('Pyodide not initialized yet');
             return;
@@ -292,8 +293,8 @@ contributions_dicts
         }
     }
 
-    document.getElementById('calc-btn').addEventListener('click', calculate);
-    document.getElementById('calc-btn').disabled = true;
+    document.getElementById('compute-contributions-btn').addEventListener('click', computeContributions);
+    document.getElementById('compute-contributions-btn').disabled = true;
 
     function rebalance() {
         // Sum up all current holdings
