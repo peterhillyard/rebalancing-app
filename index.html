@@ -132,7 +132,7 @@
                 currentPercentElement.textContent = currentPercent.toFixed(2);
             }
             
-            const diffPercent = (holding.target || 0) - currentPercent;
+            const diffPercent = currentPercent - (holding.target || 0);
             const diffPercentElement = document.getElementById(`diff-percent-${holding.id}`);
             if (diffPercentElement) {
                 diffPercentElement.textContent = diffPercent.toFixed(2);
