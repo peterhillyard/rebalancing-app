@@ -8,7 +8,7 @@
     <style>
         body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; line-height: 1.6; }
         .container { border: 1px solid #ddd; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .input-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .input-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 2fr 2fr auto; gap: 10px; align-items: center; margin-bottom: 10px; }
         .input-row input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
         .input-row .display-value { padding: 8px; background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; text-align: right; }
         .input-row button { padding: 8px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; }
@@ -19,12 +19,12 @@
         .compute-contributions-btn:disabled { background: #6c757d; cursor: not-allowed; }
         .rebalance-btn { padding: 10px 20px; background: #6f42c1; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; margin-left: 10px; }
         .rebalance-btn:hover { background: #5a32a3; }
-        .header-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #007bff; }
+        .header-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 2fr 2fr auto; gap: 10px; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #007bff; }
         #holdings-list { margin-top: 20px; }
         .contribution-section { margin-bottom: 30px; padding: 15px; background: #f8f9fa; border-radius: 5px; }
         .contribution-section label { display: block; margin-bottom: 5px; font-weight: bold; }
         .contribution-section input { padding: 10px; width: 200px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
-        .totals-row { display: grid; grid-template-columns: 2fr 1fr 2fr 2fr auto; gap: 10px; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 2px solid #007bff; font-weight: bold; }
+        .totals-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 2fr 2fr auto; gap: 10px; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 2px solid #007bff; font-weight: bold; }
         .totals-row .display-value { padding: 8px; background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; text-align: right; }
     </style>
 </head>
@@ -44,6 +44,8 @@
         <div class="header-row">
             <div>Ticker</div>
             <div>Target %</div>
+            <div>Current %</div>
+            <div>Diff %</div>
             <div>Current Amount ($)</div>
             <div>Amount to Contribute ($)</div>
             <div></div>
@@ -55,6 +57,8 @@
     <div class="totals-row">
         <div>TOTALS</div>
         <div class="display-value" id="total-target">0.00</div>
+        <div class="display-value" id="total-current-percent">0.00</div>
+        <div class="display-value" id="total-diff-percent">0.00</div>
         <div class="display-value" id="total-amount">0.00</div>
         <div class="display-value" id="total-contribute">0.00</div>
         <div></div>
@@ -78,6 +82,8 @@
         rowDiv.innerHTML = `
             <input type="text" placeholder="e.g., VTSAX" data-field="ticker" data-row="${rowId}">
             <input type="number" placeholder="20" min="0" max="100" step="0.01" data-field="target" data-row="${rowId}">
+            <div class="display-value" id="current-percent-${rowId}">0.00</div>
+            <div class="display-value" id="diff-percent-${rowId}">0.00</div>
             <input type="number" placeholder="5000" min="0" step="0.01" data-field="amount" data-row="${rowId}">
             <div class="display-value" id="calc-${rowId}">0.00</div>
             <button onclick="removeRow(${rowId})">Remove</button>
@@ -106,6 +112,7 @@
         let totalTarget = 0;
         let totalAmount = 0;
         let totalContribute = 0;
+        let totalDiffPercent = 0;
         
         holdingsData.forEach(holding => {
             totalTarget += holding.target || 0;
@@ -117,7 +124,25 @@
             }
         });
         
+        // Update current percentages and differences for each holding
+        holdingsData.forEach(holding => {
+            const currentPercent = totalAmount > 0 ? ((holding.amount || 0) / totalAmount * 100) : 0;
+            const currentPercentElement = document.getElementById(`current-percent-${holding.id}`);
+            if (currentPercentElement) {
+                currentPercentElement.textContent = currentPercent.toFixed(2);
+            }
+            
+            const diffPercent = (holding.target || 0) - currentPercent;
+            const diffPercentElement = document.getElementById(`diff-percent-${holding.id}`);
+            if (diffPercentElement) {
+                diffPercentElement.textContent = diffPercent.toFixed(2);
+            }
+            totalDiffPercent += Math.abs(diffPercent);
+        });
+        
         document.getElementById('total-target').textContent = totalTarget.toFixed(2);
+        document.getElementById('total-current-percent').textContent = totalAmount > 0 ? '100.00' : '0.00';
+        document.getElementById('total-diff-percent').textContent = totalDiffPercent.toFixed(2);
         document.getElementById('total-amount').textContent = totalAmount.toFixed(2);
         document.getElementById('total-contribute').textContent = totalContribute.toFixed(2);
     }
@@ -342,14 +367,14 @@ contributions_dicts
     // Prepopulate holdings
     const prepopulatedHoldings = {
         "VBIL": 2.0,
-        "VTIP": 1.5,
+        "VSS": 29.25,
         "VCIT": 1.5,
         "VOO": 7.5,
-        "VTV": 15.0,
+        "VTIP": 1.5,
         "VB": 15.0,
         "VBR": 12.5,
         "VT": 15.75,
-        "VSS": 29.25
+        "VTV": 15.0,
     };
     
     // Add rows for prepopulated holdings
