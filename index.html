@@ -26,6 +26,23 @@
         .contribution-section input { padding: 10px; width: 200px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
         .totals-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 2fr 2fr auto; gap: 10px; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 2px solid #007bff; font-weight: bold; }
         .totals-row .display-value { padding: 8px; background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; text-align: right; }
+        .import-btn { padding: 10px 20px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; margin-left: 10px; }
+        .import-btn:hover { background: #138496; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; border-radius: 10px; width: 90%; max-width: 700px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover, .close:focus { color: #000; }
+        .modal textarea { width: 100%; height: 200px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; margin-bottom: 15px; }
+        .parse-btn { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        .parse-btn:hover { background: #218838; }
+        .apply-btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .apply-btn:hover { background: #0056b3; }
+        .apply-btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .parsed-results { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; max-height: 300px; overflow-y: auto; }
+        .parsed-results table { width: 100%; border-collapse: collapse; }
+        .parsed-results th, .parsed-results td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+        .parsed-results th { background: #007bff; color: white; font-weight: bold; }
+        .parsed-results td:last-child { text-align: right; }
     </style>
 </head>
 <body>
@@ -53,6 +70,7 @@
     </div>
     
     <button class="add-btn" id="add-row-btn">+ Add Holding</button>
+    <button class="import-btn" id="import-btn">Import Holdings</button>
     
     <div class="totals-row">
         <div>TOTALS</div>
@@ -68,10 +86,38 @@
     <button class="rebalance-btn" id="rebalance-btn">Rebalance</button>
 </div>
 
+<!-- Import Holdings Modal -->
+<div id="import-modal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h3>Import Holdings</h3>
+        <p>Paste your holdings data below:</p>
+        <textarea id="holdings-text" placeholder="Paste your holdings data here..."></textarea>
+        <button class="parse-btn" id="parse-btn">Parse Data</button>
+        
+        <div id="parsed-results" class="parsed-results" style="display: none;">
+            <h4>Parsed Holdings:</h4>
+            <table id="parsed-table">
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Current Position ($)</th>
+                    </tr>
+                </thead>
+                <tbody id="parsed-tbody"></tbody>
+            </table>
+            <div style="margin-top: 15px;">
+                <button class="apply-btn" id="apply-btn">Apply to Current Amounts</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     let holdingsData = [];
     let rowCounter = 0;
     let pyodide = null;
+    let parsedHoldingsData = {};
 
     function addRow() {
         const rowId = rowCounter++;
@@ -361,6 +407,116 @@ contributions_dicts
     }
 
     document.getElementById('rebalance-btn').addEventListener('click', rebalance);
+
+    // Import Holdings functionality
+    const importModal = document.getElementById('import-modal');
+    const importBtn = document.getElementById('import-btn');
+    const closeBtn = document.querySelector('.close');
+    const parseBtn = document.getElementById('parse-btn');
+    const applyBtn = document.getElementById('apply-btn');
+    const holdingsText = document.getElementById('holdings-text');
+    const parsedResults = document.getElementById('parsed-results');
+    const parsedTbody = document.getElementById('parsed-tbody');
+
+    importBtn.addEventListener('click', () => {
+        importModal.style.display = 'block';
+        holdingsText.value = '';
+        parsedResults.style.display = 'none';
+        parsedHoldingsData = {};
+    });
+
+    closeBtn.addEventListener('click', () => {
+        importModal.style.display = 'none';
+    });
+
+    window.addEventListener('click', (e) => {
+        if (e.target === importModal) {
+            importModal.style.display = 'none';
+        }
+    });
+
+    parseBtn.addEventListener('click', () => {
+        const text = holdingsText.value;
+        parsedHoldingsData = parseHoldingsText(text);
+        
+        if (Object.keys(parsedHoldingsData).length === 0) {
+            alert('No holdings found. Please check the format of your pasted data.');
+            return;
+        }
+        
+        // Display parsed results
+        parsedTbody.innerHTML = '';
+        Object.entries(parsedHoldingsData).forEach(([ticker, amount]) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${ticker}</strong></td>
+                <td>$${amount.toFixed(2)}</td>
+            `;
+            parsedTbody.appendChild(row);
+        });
+        
+        parsedResults.style.display = 'block';
+    });
+
+    applyBtn.addEventListener('click', () => {
+        applyParsedHoldings();
+        importModal.style.display = 'none';
+        alert(`Successfully imported ${Object.keys(parsedHoldingsData).length} holdings!`);
+    });
+
+    function parseHoldingsText(text) {
+        const holdings = {};
+        const lines = text.split('\n');
+        
+        let currentTicker = null;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // Check if line is a ticker symbol (all caps, 2-5 characters, typically alone on a line)
+            // Common ticker patterns: VOO, VT, VTV, VTSAX, etc.
+            if (/^[A-Z]{2,5}$/.test(line)) {
+                currentTicker = line;
+            }
+            
+            // Look for "Current position" followed by a dollar amount
+            if (line.includes('Current position') && currentTicker) {
+                // Look for dollar amount on this line or the next line
+                let dollarMatch = line.match(/\$([0-9,]+\.\d{2})/);
+                
+                if (!dollarMatch && i + 1 < lines.length) {
+                    // Check next line
+                    dollarMatch = lines[i + 1].match(/\$([0-9,]+\.\d{2})/);
+                }
+                
+                if (dollarMatch) {
+                    const amountStr = dollarMatch[1].replace(/,/g, '');
+                    const amount = parseFloat(amountStr);
+                    holdings[currentTicker] = amount;
+                    currentTicker = null; // Reset after finding a match
+                }
+            }
+        }
+        
+        return holdings;
+    }
+
+    function applyParsedHoldings() {
+        // Update existing holdings with matching tickers
+        holdingsData.forEach(holding => {
+            if (holding.ticker && parsedHoldingsData.hasOwnProperty(holding.ticker)) {
+                holding.amount = parsedHoldingsData[holding.ticker];
+                
+                // Update the input field
+                const amountInput = document.querySelector(`[data-field="amount"][data-row="${holding.id}"]`);
+                if (amountInput) {
+                    amountInput.value = parsedHoldingsData[holding.ticker].toFixed(2);
+                }
+            }
+        });
+        
+        updateTotals();
+    }
 
     initPyodide();
     
